@@ -1,0 +1,45 @@
+# Node modules
+/node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+
+# Dependency directories
+jspm_packages/
+
+# Build output
+/dist
+/build
+/public
+
+# IDEs and text editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# NPM package lock files
+package-lock.json
+yarn.lock
+
+# Coverage directory used by tools like istanbul
+/coverage
+
+# Docker related files (if any)
+docker-compose.yml
+Dockerfile
+
+# Optional: Keep these files private if you have sensitive data in them
+*.pem
+*.key
