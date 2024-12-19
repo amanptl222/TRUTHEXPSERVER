@@ -13,6 +13,12 @@ const app = express();
 // Enable CORS
 app.use(cors());
 
+app.use(cors({
+    origin: '*', // Replace with your frontend's domain
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
+
 // Connect to the database
 connectDB();
 
