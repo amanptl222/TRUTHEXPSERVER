@@ -1,34 +1,20 @@
-const express = require('express');
-const multer = require('multer'); // File upload handler
-const path = require('path');
-const {authenticate, restrictToAdmin} = require('../middlewares/auth'); // Import the authentication middleware
+// routes/uploadRoutes.js
+const express = require("express");
+const { authenticate, restrictToAdmin } = require("../middlewares/auth");
+const createS3Uploader = require("../middlewares/s3Uploader");
 
 const router = express.Router();
+const upload = createS3Uploader(process.env.AWS_BLOG_BUCKET_NAME);
 
-// Configure Multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // Folder to store uploaded images
-  },
-  filename: (req, file, cb) => {
-    // Unique filename using timestamp
-    cb(null, Date.now() + '-' + file.originalname);
-  },
-});
-
-const upload = multer({ storage: storage });
-
-// Route for image upload (requires authentication)
-router.post('/upload-image', authenticate, restrictToAdmin, upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).send('No file uploaded');
+router.post(
+  "/upload-image",
+  authenticate,
+  restrictToAdmin,
+  upload.single("file"),
+  (req, res) => {
+    if (!req.file) return res.status(400).send("No file uploaded");
+    res.json({ url: req.file.location });
   }
-
-  // Image URL to be sent in the response
-  const imageUrl = `${process.env.BASE_URL}/uploads/${req.file.filename}`;
-  
-  // Respond with the image URL
-  res.json({ url: imageUrl });
-});
+);
 
 module.exports = router;

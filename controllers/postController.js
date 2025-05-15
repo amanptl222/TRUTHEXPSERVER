@@ -1,5 +1,7 @@
-const Post = require('../models/Post');
-const { generateFileUrl, deleteFile } = require('../utils/fileUtils');
+const Post = require("../models/Post");
+const { generateFileUrl, deleteFile } = require("../utils/fileUtils");
+const s3 = require("../utils/s3");
+const { AWS_BUCKET_NAME } = process.env;
 
 // Create a new post
 exports.createPost = async (req, res) => {
@@ -7,9 +9,8 @@ exports.createPost = async (req, res) => {
     const { type, caption } = req.body;
 
     // Check if a file is provided
-    if (!req.file) return res.status(400).json({ error: 'File is required' });
-
-    const filePath = generateFileUrl(req.file.filename);
+    if (!req.file) return res.status(400).json({ error: "File is required" });
+    const filePath = req.file.location; // S3 file URL
 
     const post = new Post({
       type,
@@ -18,7 +19,7 @@ exports.createPost = async (req, res) => {
     });
 
     await post.save();
-    res.status(201).json({ message: 'Post created successfully', post });
+    res.status(201).json({ message: "Post created successfully", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -28,21 +29,26 @@ exports.createPost = async (req, res) => {
 exports.editPost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
     const { type, caption } = req.body;
 
     // Handle file update (if new file uploaded)
     if (req.file) {
-      deleteFile(post.url.split('/').pop()); // Delete old file
-      post.url = generateFileUrl(req.file.filename); // Generate new file URL
+      // Extract S3 key from URL
+      const oldKey = post.url.split("/").pop();
+
+      // Delete old file from S3
+      await s3.deleteObject({ Bucket: AWS_BUCKET_NAME, Key: oldKey }).promise();
+
+      post.url = req.file.location; // New S3 file URL
     }
 
     post.type = type || post.type;
     post.caption = caption || post.caption;
 
     await post.save();
-    res.status(200).json({ message: 'Post updated successfully', post });
+    res.status(200).json({ message: "Post updated successfully", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -52,12 +58,14 @@ exports.editPost = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
-    deleteFile(post.url.split('/').pop()); // Delete associated file
+    const key = post.url.split("/").pop();
+    await s3.deleteObject({ Bucket: AWS_BUCKET_NAME, Key: key }).promise();
+
     await post.remove();
 
-    res.status(200).json({ message: 'Post deleted successfully' });
+    res.status(200).json({ message: "Post deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -67,14 +75,14 @@ exports.deletePost = async (req, res) => {
 exports.likePost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
     if (!post.likes.includes(req.user.id)) {
       post.likes.push(req.user.id);
     }
 
     await post.save();
-    res.status(200).json({ message: 'Post liked', post });
+    res.status(200).json({ message: "Post liked", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -84,12 +92,12 @@ exports.likePost = async (req, res) => {
 exports.unlikePost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
     post.likes = post.likes.filter((id) => id.toString() !== req.user.id);
     await post.save();
 
-    res.status(200).json({ message: 'Post unliked', post });
+    res.status(200).json({ message: "Post unliked", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -101,12 +109,12 @@ exports.addComment = async (req, res) => {
     const { comment } = req.body;
 
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
     post.comments.push({ user: req.user.id, comment });
     await post.save();
 
-    res.status(201).json({ message: 'Comment added', post });
+    res.status(201).json({ message: "Comment added", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -116,12 +124,12 @@ exports.addComment = async (req, res) => {
 exports.deleteComment = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
     post.comments = post.comments.filter((c) => c.id !== req.params.commentId);
     await post.save();
 
-    res.status(200).json({ message: 'Comment deleted', post });
+    res.status(200).json({ message: "Comment deleted", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -131,9 +139,9 @@ exports.deleteComment = async (req, res) => {
 exports.getSinglePostById = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
-    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
-    res.status(200).json({ message: 'Post retrieved successfully', post });
+    res.status(200).json({ message: "Post retrieved successfully", post });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -155,7 +163,7 @@ exports.getAllPostsByType = async (req, res) => {
     const totalCount = await Post.countDocuments(query);
 
     res.status(200).json({
-      message: 'Posts retrieved successfully',
+      message: "Posts retrieved successfully",
       posts,
       pagination: {
         currentPage: page,

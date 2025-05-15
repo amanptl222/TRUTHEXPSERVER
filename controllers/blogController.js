@@ -1,18 +1,23 @@
-const Blog = require('../models/Blog');
-const { generateFileUrl, deleteFile } = require('../utils/fileUtils');
+const Blog = require("../models/Blog");
+const s3 = require("../utils/s3"); // AWS SDK S3 instance
+const { AWS_BLOG_BUCKET_NAME } = process.env;
 
 // Create a new blog
 exports.createBlog = async (req, res) => {
   try {
     const { title, content } = req.body;
 
+    const files = req.files || [];
+    const fileUrls = files.map((file) => file.location);
+
     const blog = new Blog({
       title,
-      content
+      content,
+      files: fileUrls,
     });
 
     await blog.save();
-    res.status(201).json({ message: 'Blog created successfully', blog });
+    res.status(201).json({ message: "Blog created successfully", blog });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -22,7 +27,7 @@ exports.createBlog = async (req, res) => {
 exports.getBlogById = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
 
     res.status(200).json(blog);
   } catch (err) {
@@ -33,10 +38,10 @@ exports.getBlogById = async (req, res) => {
 // Get all blogs with pagination
 exports.getAllBlogs = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query; // Default to page 1, limit 10
+    const { page = 1, limit = 10 } = req.query;
 
     const blogs = await Blog.find()
-      .sort({ createdAt: -1 }) // Sort by newest first
+      .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit));
 
@@ -60,21 +65,34 @@ exports.getAllBlogs = async (req, res) => {
 exports.editBlog = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
 
     const { title, content } = req.body;
 
-    // Handle file update (if new files uploaded)
-    if (req.files) {
-      blog.files.forEach((file) => deleteFile(file.split('/').pop())); // Delete old files
-      blog.files = req.files.map(file => generateFileUrl(file.filename)); // Add new files
+    if (req.files && req.files.length > 0) {
+      // Delete old files from S3
+      if (blog.files && blog.files.length > 0) {
+        const deleteParams = {
+          Bucket: AWS_BLOG_BUCKET_NAME,
+          Delete: {
+            Objects: blog.files.map((url) => ({
+              Key: url.split("/").pop(),
+            })),
+            Quiet: false,
+          },
+        };
+        await s3.deleteObjects(deleteParams).promise();
+      }
+
+      // Update with new uploaded file URLs
+      blog.files = req.files.map((file) => file.location);
     }
 
     blog.title = title || blog.title;
     blog.content = content || blog.content;
 
     await blog.save();
-    res.status(200).json({ message: 'Blog updated successfully', blog });
+    res.status(200).json({ message: "Blog updated successfully", blog });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -84,12 +102,25 @@ exports.editBlog = async (req, res) => {
 exports.deleteBlog = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
 
-    blog.files.forEach((file) => deleteFile(file.split('/').pop())); // Delete associated files
+    // Delete all associated files from S3
+    if (blog.files && blog.files.length > 0) {
+      const deleteParams = {
+        Bucket: AWS_BLOG_BUCKET_NAME,
+        Delete: {
+          Objects: blog.files.map((url) => ({
+            Key: url.split("/").pop(),
+          })),
+          Quiet: false,
+        },
+      };
+      await s3.deleteObjects(deleteParams).promise();
+    }
+
     await blog.remove();
 
-    res.status(200).json({ message: 'Blog deleted successfully' });
+    res.status(200).json({ message: "Blog deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -101,12 +132,12 @@ exports.addCommentToBlog = async (req, res) => {
     const { comment } = req.body;
 
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
 
     blog.comments.push({ user: req.user.id, comment });
     await blog.save();
 
-    res.status(201).json({ message: 'Comment added', blog });
+    res.status(201).json({ message: "Comment added", blog });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -116,12 +147,12 @@ exports.addCommentToBlog = async (req, res) => {
 exports.deleteCommentFromBlog = async (req, res) => {
   try {
     const blog = await Blog.findById(req.params.id);
-    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
 
     blog.comments = blog.comments.filter((c) => c.id !== req.params.commentId);
     await blog.save();
 
-    res.status(200).json({ message: 'Comment deleted', blog });
+    res.status(200).json({ message: "Comment deleted", blog });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
