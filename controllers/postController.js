@@ -148,22 +148,77 @@ exports.getSinglePostById = async (req, res) => {
 };
 
 // Get all posts by type with pagination
-exports.getAllPostsByType = async (req, res) => {
+// exports.getAllPostsByType = async (req, res) => {
+//   try {
+//     const { type } = req.query;
+//     const page = parseInt(req.query.page, 10) || 1;
+//     const limit = parseInt(req.query.limit, 10) || 10;
+
+//     const query = type ? { type } : {};
+//     const posts = await Post.find(query)
+//       .sort({ createdAt: -1 }) // Sort by creation date (newest first)
+//       .skip((page - 1) * limit)
+//       .limit(limit);
+
+//     const totalCount = await Post.countDocuments(query);
+
+//     res.status(200).json({
+//       message: "Posts retrieved successfully",
+//       posts,
+//       pagination: {
+//         currentPage: page,
+//         totalPages: Math.ceil(totalCount / limit),
+//         totalItems: totalCount,
+//       },
+//     });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// };
+
+exports.getAllImagePosts = async (req, res) => {
   try {
-    const { type } = req.query;
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
 
-    const query = type ? { type } : {};
+    const query = { type: "image" };
+
     const posts = await Post.find(query)
-      .sort({ createdAt: -1 }) // Sort by creation date (newest first)
+      .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
 
     const totalCount = await Post.countDocuments(query);
 
     res.status(200).json({
-      message: "Posts retrieved successfully",
+      message: "Image posts retrieved successfully",
+      posts,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalItems: totalCount,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+exports.getAllVideoPosts = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    const query = { type: "video" };
+
+    const posts = await Post.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const totalCount = await Post.countDocuments(query);
+
+    res.status(200).json({
+      message: "Video posts retrieved successfully",
       posts,
       pagination: {
         currentPage: page,
