@@ -1,6 +1,15 @@
 const Post = require("../models/Post");
 const { generateFileUrl, deleteFile } = require("../utils/fileUtils");
-const s3 = require("../utils/s3");
+const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
 const { AWS_BUCKET_NAME } = process.env;
 
 // Create a new post
@@ -33,15 +42,15 @@ exports.editPost = async (req, res) => {
 
     const { type, caption } = req.body;
 
-    // Handle file update (if new file uploaded)
     if (req.file) {
-      // Extract S3 key from URL
       const oldKey = post.url.split("/").pop();
 
-      // Delete old file from S3
-      await s3.deleteObject({ Bucket: AWS_BUCKET_NAME, Key: oldKey }).promise();
+      // Use DeleteObjectCommand and s3.send()
+      const deleteParams = { Bucket: process.env.AWS_BUCKET_NAME, Key: oldKey };
+      const command = new DeleteObjectCommand(deleteParams);
+      await s3.send(command);
 
-      post.url = req.file.location; // New S3 file URL
+      post.url = req.file.location;
     }
 
     post.type = type || post.type;
@@ -50,6 +59,7 @@ exports.editPost = async (req, res) => {
     await post.save();
     res.status(200).json({ message: "Post updated successfully", post });
   } catch (err) {
+    console.error("Edit post error:", err);
     res.status(500).json({ error: err.message });
   }
 };
